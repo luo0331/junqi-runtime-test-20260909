@@ -44,6 +44,9 @@ struct RuntimeProbe {
         case "sequence":
             let images = Array(CommandLine.arguments.dropFirst(2))
             try await runSequence(imagePaths: images)
+        case "stream":
+            let images = Array(CommandLine.arguments.dropFirst(2))
+            try await runStream(imagePaths: images)
         default:
             throw ProbeError.invalidArguments
         }
@@ -87,6 +90,33 @@ struct RuntimeProbe {
                 frameIndex += 1
                 try await Task.sleep(nanoseconds: 100_000_000)
             }
+        }
+    }
+
+    private static func runStream(imagePaths: [String]) async throws {
+        guard !imagePaths.isEmpty else { throw ProbeError.invalidArguments }
+        let analyzer = ScreenAnalyzer()
+        print("=== stream frames=\(imagePaths.count) ===")
+
+        var previousReady = false
+        var previousPhase = GameScreenPhase.idle
+        for (frameIndex, imagePath) in imagePaths.enumerated() {
+            let pixelBuffer = try makePixelBuffer(path: imagePath)
+            let snapshot = await analyzer.analyze(pixelBuffer: pixelBuffer)
+            let board = snapshot.board
+            let ready = board?.isSessionReady ?? false
+            let phase = board?.gamePhase ?? .idle
+            let shouldPrint = frameIndex == 0
+                || frameIndex == imagePaths.count - 1
+                || frameIndex % 10 == 0
+                || ready != previousReady
+                || phase != previousPhase
+            if shouldPrint {
+                print(snapshotText(frame: frameIndex, snapshot: snapshot))
+            }
+            previousReady = ready
+            previousPhase = phase
+            try await Task.sleep(nanoseconds: 100_000_000)
         }
     }
 

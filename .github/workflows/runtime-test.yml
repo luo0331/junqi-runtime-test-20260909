@@ -34,3 +34,6 @@ jobs:
             testdata/frame_0011.jpg \
             testdata/frame_0031.jpg \
             testdata/frame_0061.jpg
+          if [ -d testdata/stream ]; then
+            ./runtime_probe stream testdata/stream/*.jpg
+          fi
