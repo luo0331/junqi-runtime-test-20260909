@@ -1,0 +1,36 @@
+name: runtime-probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  probe:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile runtime probe
+        run: |
+          xcrun swiftc -O \
+            -o runtime_probe \
+            tools/runtime_probe.swift \
+            JunqiAssistant/Analysis/GameModels.swift \
+            JunqiAssistant/Analysis/BoardTracker.swift \
+            JunqiAssistant/Analysis/ScreenAnalyzer.swift \
+            -framework Vision \
+            -framework CoreVideo \
+            -framework CoreGraphics \
+            -framework ImageIO
+
+      - name: Probe game frames
+        run: |
+          ./runtime_probe phase frame_0001 testdata/frame_0001.jpg 30
+          ./runtime_probe phase frame_0011 testdata/frame_0011.jpg 30
+          ./runtime_probe phase frame_0031 testdata/frame_0031.jpg 30
+          ./runtime_probe sequence \
+            testdata/frame_0001.jpg \
+            testdata/frame_0011.jpg \
+            testdata/frame_0031.jpg \
+            testdata/frame_0061.jpg
