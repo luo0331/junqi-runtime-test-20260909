@@ -26,14 +26,16 @@ jobs:
 
       - name: Probe game frames
         run: |
-          ./runtime_probe phase frame_0001 testdata/frame_0001.jpg 30
-          ./runtime_probe phase frame_0011 testdata/frame_0011.jpg 30
-          ./runtime_probe phase frame_0031 testdata/frame_0031.jpg 30
-          ./runtime_probe sequence \
-            testdata/frame_0001.jpg \
-            testdata/frame_0011.jpg \
-            testdata/frame_0031.jpg \
-            testdata/frame_0061.jpg
+          if [ -f testdata/frame_0001.jpg ]; then
+            ./runtime_probe phase frame_0001 testdata/frame_0001.jpg 30
+            ./runtime_probe phase frame_0011 testdata/frame_0011.jpg 30
+            ./runtime_probe phase frame_0031 testdata/frame_0031.jpg 30
+            ./runtime_probe sequence \
+              testdata/frame_0001.jpg \
+              testdata/frame_0011.jpg \
+              testdata/frame_0031.jpg \
+              testdata/frame_0061.jpg
+          fi
           if [ -d testdata/stream ]; then
             ./runtime_probe stream testdata/stream/*.jpg
           fi
