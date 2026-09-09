@@ -41,6 +41,9 @@ jobs:
           if [ -d testdata/stream ]; then
             ./runtime_probe stream testdata/stream/*.jpg
           fi
+          if [ -f testdata/stream/frame_0001.jpg ]; then
+            ./runtime_probe ocr testdata/stream/frame_0001.jpg
+          fi
           if [ -f testdata/video.mp4 ]; then
             ./runtime_probe video testdata/video.mp4 10
           fi
