@@ -459,7 +459,7 @@ final class BoardTracker {
                 continue
             }
 
-            if let target = nearestPoint(to: oldPoint, in: added, maximumDistance: 16) {
+            if let target = nearestPoint(to: oldPoint, in: added, maximumDistance: 32) {
                 candidates.append(
                     MoveCandidate(
                         oldPoint: oldPoint,
@@ -469,7 +469,7 @@ final class BoardTracker {
                         distance: distance(oldPoint, target)
                     )
                 )
-            } else if let target = nearestPoint(to: oldPoint, in: changed, maximumDistance: 16) {
+            } else if let target = nearestPoint(to: oldPoint, in: changed, maximumDistance: 32) {
                 candidates.append(
                     MoveCandidate(
                         oldPoint: oldPoint,
