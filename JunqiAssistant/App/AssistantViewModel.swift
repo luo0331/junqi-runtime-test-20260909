@@ -289,7 +289,8 @@ final class AssistantViewModel: ObservableObject {
     private func summarize(board: BoardSnapshot?) -> String {
         guard let board else { return "暂无轨迹" }
         if !board.isSessionReady {
-            return "\(board.gamePhase.title) · 稳定确认\(board.stabilityProgress)/8"
+            let target = board.gamePhase == .matched ? 8 : 20
+            return "\(board.gamePhase.title) · 稳定确认\(board.stabilityProgress)/\(target)"
         }
         let source = board.usedFallbackRect ? "自动回退" : "视觉定位"
         let tracking = "\(source) · 占位\(board.occupiedCount) 轨迹\(board.tracks.count)"

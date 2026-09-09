@@ -11,6 +11,16 @@ struct RecognizedBoardPiece {
 /// 从录屏画面中定位棋盘，并跟踪棋位上棋子的前后帧变化。
 final class BoardTracker {
     static let gridSize = 17
+    static let ourOpeningPositions: Set<BoardPoint> = {
+        var result = Set<BoardPoint>()
+        for row in 0..<BoardLayout.rows {
+            for col in 0..<BoardLayout.columns
+            where !BoardLayout.isCamp(row: row, col: col) {
+                result.insert(BoardPoint(row: 11 + row, col: 6 + col))
+            }
+        }
+        return result
+    }()
 
     private var frameIndex = 0
     private var sessionID = 1
@@ -160,9 +170,29 @@ final class BoardTracker {
         }
 
         guard isArmed else {
-            stabilityProgress = 0
+            // 文字状态机漏识别时，用底部我方固定棋位做视觉兜底。
+            // 必须先确认棋盘确实像正式对局，避免在房间页或菜单页启动。
+            guard looksLikeGameBoard(occupancy: occupancy) else {
+                stabilityProgress = 0
+                warmupOccupancy.removeAll()
+                return false
+            }
+            let current = Set(occupancy.compactMap { $0.value ? $0.key : nil })
+            let previous = Set(warmupOccupancy.compactMap { $0.value ? $0.key : nil })
+            if previous.isEmpty {
+                stabilityProgress = 1
+            } else {
+                let changed = current.symmetricDifference(previous).count
+                let changeRatio = Double(changed) / Double(max(1, current.count))
+                stabilityProgress = changeRatio <= 0.05
+                    ? min(20, stabilityProgress + 1)
+                    : 1
+            }
+            warmupOccupancy = occupancy
+            guard stabilityProgress >= 20 else { return false }
+            isSessionReady = true
             warmupOccupancy.removeAll()
-            return false
+            return true
         }
 
         let current = Set(occupancy.compactMap { $0.value ? $0.key : nil })
@@ -182,6 +212,18 @@ final class BoardTracker {
         isSessionReady = true
         warmupOccupancy.removeAll()
         return true
+    }
+
+    private func looksLikeGameBoard(
+        occupancy: [BoardPoint: Bool]
+    ) -> Bool {
+        let occupiedCount = occupancy.values.filter { $0 }.count
+        guard (40...160).contains(occupiedCount) else { return false }
+
+        let ourOccupied = Self.ourOpeningPositions.reduce(0) { count, point in
+            count + (occupancy[point] == true ? 1 : 0)
+        }
+        return ourOccupied >= 15
     }
 
     static func boardPoint(for pixelPoint: CGPoint, in boardRect: CGRect) -> BoardPoint? {
