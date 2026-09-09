@@ -316,8 +316,8 @@ final class GameStateEngine {
             enemy = attacker
             enemyIsAttacker = true
         } else {
-            if !attackerSurvives { markDead(pieceID: attackerPieceID) }
-            if !defenderSurvives { markDead(pieceID: defenderPieceID) }
+            // 左敌与右敌属于同一阵营，不可能互相吃子。
+            // 这里通常是轨迹误配，忽略，避免错误扣减剩余牌。
             return nil
         }
 
