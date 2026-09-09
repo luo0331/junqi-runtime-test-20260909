@@ -435,7 +435,6 @@ final class BoardTracker {
         let removed = previousOccupied.subtracting(currentOccupied)
         let added = currentOccupied.subtracting(previousOccupied)
 
-        var availableAdded = added
         var changed = Set<BoardPoint>()
         for point in previousOccupied.intersection(currentOccupied) {
             let oldScore = previousScores[point] ?? 0
@@ -445,43 +444,76 @@ final class BoardTracker {
             }
         }
 
-        var moves: [BoardMove] = []
+        struct MoveCandidate {
+            var oldPoint: BoardPoint
+            var target: BoardPoint
+            var trackID: String
+            var kind: PieceKind?
+            var distance: Int
+        }
+
+        var candidates: [MoveCandidate] = []
         for oldPoint in removed.sorted(by: pointSort) {
             guard let trackID = cellTracks[oldPoint],
                   let track = tracks[trackID] else {
                 continue
             }
 
-            if let target = nearestPoint(to: oldPoint, in: availableAdded, maximumDistance: 16) {
-                availableAdded.remove(target)
-                moveTrack(trackID: trackID, from: oldPoint, to: target, kind: track.kind)
-                moves.append(
-                    BoardMove(
+            if let target = nearestPoint(to: oldPoint, in: added, maximumDistance: 16) {
+                candidates.append(
+                    MoveCandidate(
+                        oldPoint: oldPoint,
+                        target: target,
                         trackID: trackID,
-                        from: oldPoint,
-                        to: target,
-                        side: BoardTracker.side(for: target),
-                        kind: track.kind
+                        kind: track.kind,
+                        distance: distance(oldPoint, target)
                     )
                 )
             } else if let target = nearestPoint(to: oldPoint, in: changed, maximumDistance: 16) {
-                changed.remove(target)
-                moveTrack(trackID: trackID, from: oldPoint, to: target, kind: track.kind)
-                moves.append(
-                    BoardMove(
+                candidates.append(
+                    MoveCandidate(
+                        oldPoint: oldPoint,
+                        target: target,
                         trackID: trackID,
-                        from: oldPoint,
-                        to: target,
-                        side: BoardTracker.side(for: target),
-                        kind: track.kind
+                        kind: track.kind,
+                        distance: distance(oldPoint, target)
                     )
                 )
-            } else {
-                cellTracks.removeValue(forKey: oldPoint)
             }
         }
 
-        for point in availableAdded.sorted(by: pointSort) {
+        // 一帧只确认一次行棋，选择距离最短的变化作为主事件。
+        let bestMove = candidates.min {
+            if $0.distance == $1.distance {
+                return pointSort($0.oldPoint, $1.oldPoint)
+            }
+            return $0.distance < $1.distance
+        }
+        var moves: [BoardMove] = []
+        if let bestMove {
+            moveTrack(
+                trackID: bestMove.trackID,
+                from: bestMove.oldPoint,
+                to: bestMove.target,
+                kind: bestMove.kind
+            )
+            moves.append(
+                BoardMove(
+                    trackID: bestMove.trackID,
+                    from: bestMove.oldPoint,
+                    to: bestMove.target,
+                    side: BoardTracker.side(for: bestMove.target),
+                    kind: bestMove.kind
+                )
+            )
+        }
+
+        let movedFrom = bestMove?.oldPoint
+        let movedTo = bestMove?.target
+        for point in removed where point != movedFrom {
+            cellTracks.removeValue(forKey: point)
+        }
+        for point in added.sorted(by: pointSort) where point != movedTo {
             createTrack(at: point)
         }
 
