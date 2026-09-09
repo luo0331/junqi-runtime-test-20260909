@@ -18,6 +18,7 @@ jobs:
             tools/runtime_probe.swift \
             JunqiAssistant/Analysis/GameModels.swift \
             JunqiAssistant/Analysis/BoardTracker.swift \
+            JunqiAssistant/Analysis/GameStateEngine.swift \
             JunqiAssistant/Analysis/ScreenAnalyzer.swift \
             -framework Vision \
             -framework CoreVideo \

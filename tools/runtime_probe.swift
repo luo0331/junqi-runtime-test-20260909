@@ -19,6 +19,35 @@ enum BoardLayout {
     }
 }
 
+enum BoardOwner: String {
+    case ours
+    case teammate
+}
+
+struct ImportedBoardRecord {
+    var owner: BoardOwner
+    var cells: [String: PieceKind]
+
+    static func empty(owner: BoardOwner) -> ImportedBoardRecord {
+        ImportedBoardRecord(owner: owner, cells: [:])
+    }
+
+    func globalPoint(for key: String) -> BoardPoint? {
+        let parts = key.split(separator: "-")
+        guard parts.count == 2,
+              let row = Int(parts[0]),
+              let col = Int(parts[1]) else {
+            return nil
+        }
+        switch owner {
+        case .ours:
+            return BoardPoint(row: 11 + row, col: 6 + col)
+        case .teammate:
+            return BoardPoint(row: 5 - row, col: 10 - col)
+        }
+    }
+}
+
 @main
 struct RuntimeProbe {
     static func main() async throws {
@@ -96,10 +125,17 @@ struct RuntimeProbe {
     private static func runStream(imagePaths: [String]) async throws {
         guard !imagePaths.isEmpty else { throw ProbeError.invalidArguments }
         let analyzer = ScreenAnalyzer()
+        let engine = GameStateEngine()
+        engine.reset(
+            ours: .empty(owner: .ours),
+            teammate: .empty(owner: .teammate)
+        )
         print("=== stream frames=\(imagePaths.count) ===")
 
         var previousReady = false
         var previousPhase = GameScreenPhase.idle
+        var previousLeftRemaining = 25
+        var previousRightRemaining = 25
         for (frameIndex, imagePath) in imagePaths.enumerated() {
             let pixelBuffer = try makePixelBuffer(path: imagePath)
             let snapshot = await analyzer.analyze(pixelBuffer: pixelBuffer)
@@ -113,6 +149,21 @@ struct RuntimeProbe {
                 || phase != previousPhase
             if shouldPrint {
                 print(snapshotText(frame: frameIndex, snapshot: snapshot))
+            }
+            if let board = board, board.isReliable {
+                let update = engine.apply(board: board, step: snapshot.step)
+                let countChanged = update.leftOpponent.remainingCount != previousLeftRemaining
+                    || update.rightOpponent.remainingCount != previousRightRemaining
+                if !update.newEvents.isEmpty || countChanged {
+                    print(
+                        "  engine frame=\(frameIndex) "
+                            + "left=\(update.leftOpponent.remainingCount) "
+                            + "right=\(update.rightOpponent.remainingCount) "
+                            + "events=\(update.newEvents.count)"
+                    )
+                    previousLeftRemaining = update.leftOpponent.remainingCount
+                    previousRightRemaining = update.rightOpponent.remainingCount
+                }
             }
             previousReady = ready
             previousPhase = phase
