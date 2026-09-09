@@ -2,6 +2,7 @@ import CoreGraphics
 import CoreVideo
 import Foundation
 import ImageIO
+import AVFoundation
 
 enum BoardLayout {
     static let rows = 6
@@ -76,6 +77,15 @@ struct RuntimeProbe {
         case "stream":
             let images = Array(CommandLine.arguments.dropFirst(2))
             try await runStream(imagePaths: images)
+        case "video":
+            guard CommandLine.arguments.count == 4,
+                  let fps = Double(CommandLine.arguments[3]) else {
+                throw ProbeError.invalidArguments
+            }
+            try await runVideo(
+                path: CommandLine.arguments[2],
+                framesPerSecond: fps
+            )
         default:
             throw ProbeError.invalidArguments
         }
@@ -171,6 +181,80 @@ struct RuntimeProbe {
         }
     }
 
+    private static func runVideo(
+        path: String,
+        framesPerSecond: Double
+    ) async throws {
+        guard framesPerSecond > 0 else { throw ProbeError.invalidArguments }
+        let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+        let duration = try await asset.load(.duration)
+        let seconds = CMTimeGetSeconds(duration)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+
+        let analyzer = ScreenAnalyzer()
+        let engine = GameStateEngine()
+        engine.reset(
+            ours: .empty(owner: .ours),
+            teammate: .empty(owner: .teammate)
+        )
+
+        print(
+            "=== video frames=\(Int(seconds * framesPerSecond)) "
+                + "duration=\(String(format: "%.2f", seconds)) fps=\(framesPerSecond) ==="
+        )
+
+        let interval = 1.0 / framesPerSecond
+        var second = 0.0
+        var frameIndex = 0
+        var previousReady = false
+        var previousLeftRemaining = 25
+        var previousRightRemaining = 25
+
+        while second < seconds {
+            do {
+                let image = try generator.copyCGImage(
+                    at: CMTime(seconds: second, preferredTimescale: 600),
+                    actualTime: nil
+                )
+                let pixelBuffer = try makePixelBuffer(image: image)
+                let snapshot = await analyzer.analyze(pixelBuffer: pixelBuffer)
+                let board = snapshot.board
+                let ready = board?.isSessionReady ?? false
+                let phase = board?.gamePhase ?? .idle
+                let shouldPrint = frameIndex == 0
+                    || frameIndex % 100 == 0
+                    || ready != previousReady
+                    || phase != .idle
+                if shouldPrint {
+                    print(snapshotText(frame: frameIndex, snapshot: snapshot))
+                }
+                if let board, board.isReliable {
+                    let update = engine.apply(board: board, step: snapshot.step)
+                    let countChanged = update.leftOpponent.remainingCount != previousLeftRemaining
+                        || update.rightOpponent.remainingCount != previousRightRemaining
+                    if !update.newEvents.isEmpty || countChanged {
+                        print(
+                            "  engine frame=\(frameIndex) "
+                                + "left=\(update.leftOpponent.remainingCount) "
+                                + "right=\(update.rightOpponent.remainingCount) "
+                                + "events=\(update.newEvents.count)"
+                        )
+                        previousLeftRemaining = update.leftOpponent.remainingCount
+                        previousRightRemaining = update.rightOpponent.remainingCount
+                    }
+                }
+                previousReady = ready
+            } catch {
+                print("frame \(frameIndex) failed: \(error)")
+            }
+            frameIndex += 1
+            second += interval
+        }
+    }
+
     private static func snapshotText(
         frame: Int,
         snapshot: ScreenSnapshot
@@ -213,7 +297,10 @@ struct RuntimeProbe {
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             throw ProbeError.cannotLoadImage(path)
         }
+        return try makePixelBuffer(image: image)
+    }
 
+    private static func makePixelBuffer(image: CGImage) throws -> CVPixelBuffer {
         let maxDimension: CGFloat = 1280
         let scale = min(
             1,
