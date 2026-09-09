@@ -182,9 +182,9 @@ final class AssistantViewModel: ObservableObject {
                     .map(\.current)
             )
         } else {
-            if let phase = snapshot.board?.gamePhase,
-               snapshot.board?.isSessionReady == false {
-                liveStateText = "\(phase.title)，暂不记牌"
+            if let board = snapshot.board,
+               board.isSessionReady == false {
+                liveStateText = "\(board.gamePhase.title) · 图像\(board.imageWidth)x\(board.imageHeight) 占位\(board.occupiedCount) 我方\(board.ourOccupiedCount)/25 稳定\(board.stabilityProgress)"
             } else {
                 liveStateText = "棋盘跟踪短暂中断"
             }
@@ -290,7 +290,7 @@ final class AssistantViewModel: ObservableObject {
         guard let board else { return "暂无轨迹" }
         if !board.isSessionReady {
             let target = board.gamePhase == .matched ? 8 : 20
-            return "\(board.gamePhase.title) · 稳定确认\(board.stabilityProgress)/\(target)"
+            return "\(board.gamePhase.title) · 图像\(board.imageWidth)x\(board.imageHeight) 占位\(board.occupiedCount) 我方\(board.ourOccupiedCount)/25 棋位特征\(board.looksLikeGameBoard ? "通过" : "未通过") 稳定\(board.stabilityProgress)/\(target)"
         }
         let source = board.usedFallbackRect ? "自动回退" : "视觉定位"
         let tracking = "\(source) · 占位\(board.occupiedCount) 轨迹\(board.tracks.count)"

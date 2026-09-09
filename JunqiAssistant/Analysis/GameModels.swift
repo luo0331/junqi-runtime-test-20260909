@@ -324,6 +324,10 @@ struct BoardSnapshot {
     var stabilityProgress: Int
     var gamePhase: GameScreenPhase
     var boardRect: CGRect
+    var imageWidth: Int
+    var imageHeight: Int
+    var ourOccupiedCount: Int
+    var looksLikeGameBoard: Bool
     var isReliable: Bool
     var occupiedCount: Int
     var recognizedCount: Int

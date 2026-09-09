@@ -57,6 +57,11 @@ final class BoardTracker {
             geometryReliable: geometryReliable,
             phase: phase
         )
+        let ourOccupiedCount = countOurOpeningOccupancy(occupancy: occupancy)
+        let boardLike = looksLikeGameBoard(
+            occupancy: occupancy,
+            ourOccupiedCount: ourOccupiedCount
+        )
         let isReliable = geometryReliable && isSessionReady
 
         var moves: [BoardMove] = []
@@ -87,6 +92,10 @@ final class BoardTracker {
             stabilityProgress: stabilityProgress,
             gamePhase: phase,
             boardRect: boardRect,
+            imageWidth: CVPixelBufferGetWidth(pixelBuffer),
+            imageHeight: CVPixelBufferGetHeight(pixelBuffer),
+            ourOccupiedCount: ourOccupiedCount,
+            looksLikeGameBoard: boardLike,
             isReliable: isReliable,
             occupiedCount: occupiedCount,
             recognizedCount: recognized.count,
@@ -126,15 +135,17 @@ final class BoardTracker {
     ) -> Bool {
         if phase == .matching {
             isArmed = false
-            stabilityProgress = 0
-            warmupOccupancy.removeAll()
             if isSessionReady {
+                stabilityProgress = 0
+                warmupOccupancy.removeAll()
                 unstableFrames += 1
                 if unstableFrames >= 8 {
                     resetSession()
                 }
+                return false
             }
-            return false
+            // 匹配文字可能短暂残留。此时仍允许强视觉特征接管，
+            // 但必须连续 20 帧确认底部我方开局棋位存在。
         }
 
         guard geometryReliable else {
@@ -226,10 +237,25 @@ final class BoardTracker {
         let occupiedCount = occupancy.values.filter { $0 }.count
         guard (40...160).contains(occupiedCount) else { return false }
 
-        let ourOccupied = Self.ourOpeningPositions.reduce(0) { count, point in
+        let ourOccupied = countOurOpeningOccupancy(occupancy: occupancy)
+        return ourOccupied >= 12
+    }
+
+    private func looksLikeGameBoard(
+        occupancy: [BoardPoint: Bool],
+        ourOccupiedCount: Int
+    ) -> Bool {
+        let occupiedCount = occupancy.values.filter { $0 }.count
+        return (40...160).contains(occupiedCount)
+            && ourOccupiedCount >= 12
+    }
+
+    private func countOurOpeningOccupancy(
+        occupancy: [BoardPoint: Bool]
+    ) -> Int {
+        Self.ourOpeningPositions.reduce(0) { count, point in
             count + (occupancy[point] == true ? 1 : 0)
         }
-        return ourOccupied >= 15
     }
 
     static func boardPoint(for pixelPoint: CGPoint, in boardRect: CGRect) -> BoardPoint? {
