@@ -133,7 +133,17 @@ struct RuntimeProbe {
             + "our=\(board.ourOccupiedCount)/25 boardLike=\(board.looksLikeGameBoard) "
             + "ready=\(board.isSessionReady) reliable=\(board.isReliable) "
             + "stable=\(board.stabilityProgress) tracks=\(board.tracks.count) "
-            + "moves=\(board.moves.count) step=\(snapshot.step.map(String.init) ?? "nil")"
+            + "moves=\(board.moves.count) "
+            + "moveDetail=\(moveSummary(board.moves)) "
+            + "step=\(snapshot.step.map(String.init) ?? "nil")"
+    }
+
+    private static func moveSummary(_ moves: [BoardMove]) -> String {
+        guard !moves.isEmpty else { return "-" }
+        return moves.prefix(8).map {
+            "\($0.trackID):\($0.from)->\($0.to)"
+        }
+        .joined(separator: ",")
     }
 
     private static func format(_ rect: CGRect) -> String {
