@@ -30,6 +30,7 @@ final class BoardTracker {
     private var stabilityProgress = 0
     private var unstableFrames = 0
     private var moveCooldownFrames = 0
+    private var expectedTurn: BoardSide = .ours
     private var warmupOccupancy: [BoardPoint: Bool] = [:]
     private var stableOccupancy: [BoardPoint: Bool] = [:]
     private var occupancyStreaks: [BoardPoint: Int] = [:]
@@ -102,6 +103,10 @@ final class BoardTracker {
         }
         let sideCounts = Dictionary(grouping: tracks.values, by: \.side)
             .mapValues { $0.count }
+        let recognizedKinds = Dictionary(
+            recognized.map { ($0.point, $0.kind) },
+            uniquingKeysWith: { _, latest in latest }
+        )
 
         return BoardSnapshot(
             frameIndex: frameIndex,
@@ -122,6 +127,7 @@ final class BoardTracker {
             scoreMaximum: sampled.scores.values.max() ?? 0,
             occupancyThreshold: classification.threshold,
             sideCounts: sideCounts,
+            recognizedKinds: recognizedKinds,
             tracks: tracks.values.sorted { $0.id < $1.id },
             moves: moves
         )
@@ -140,6 +146,7 @@ final class BoardTracker {
         stabilityProgress = 0
         unstableFrames = 0
         moveCooldownFrames = 0
+        expectedTurn = .ours
         warmupOccupancy.removeAll()
         stableOccupancy.removeAll()
         occupancyStreaks.removeAll()
@@ -435,6 +442,7 @@ final class BoardTracker {
         scores: [BoardPoint: Double],
         recognized: [RecognizedBoardPiece]
     ) -> [BoardMove] {
+        applyRecognizedKinds(recognized)
         let currentOccupied = Set(occupancy.compactMap { $0.value ? $0.key : nil })
         let previousOccupied = Set(previousOccupancy.compactMap { $0.value ? $0.key : nil })
         let removed = previousOccupied.subtracting(currentOccupied)
@@ -453,6 +461,7 @@ final class BoardTracker {
             var oldPoint: BoardPoint
             var target: BoardPoint
             var trackID: String
+            var side: BoardSide
             var kind: PieceKind?
             var distance: Int
         }
@@ -465,21 +474,25 @@ final class BoardTracker {
             }
 
             if let target = nearestPoint(to: oldPoint, in: added, maximumDistance: 32) {
+                let side = ownerSide(for: track)
                 candidates.append(
                     MoveCandidate(
                         oldPoint: oldPoint,
                         target: target,
                         trackID: trackID,
+                        side: side,
                         kind: track.kind,
                         distance: distance(oldPoint, target)
                     )
                 )
             } else if let target = nearestPoint(to: oldPoint, in: changed, maximumDistance: 32) {
+                let side = ownerSide(for: track)
                 candidates.append(
                     MoveCandidate(
                         oldPoint: oldPoint,
                         target: target,
                         trackID: trackID,
+                        side: side,
                         kind: track.kind,
                         distance: distance(oldPoint, target)
                     )
@@ -487,8 +500,9 @@ final class BoardTracker {
             }
         }
 
-        // 一帧只确认一次行棋，选择距离最短的变化作为主事件。
-        let bestMove = candidates.min {
+        // 一帧只确认一次行棋，并优先选择符合逆时针轮次的阵营。
+        let expectedCandidates = candidates.filter { $0.side == expectedTurn }
+        let bestMove = expectedCandidates.min {
             if $0.distance == $1.distance {
                 return pointSort($0.oldPoint, $1.oldPoint)
             }
@@ -508,11 +522,12 @@ final class BoardTracker {
                         trackID: bestMove.trackID,
                         from: bestMove.oldPoint,
                         to: bestMove.target,
-                        side: BoardTracker.side(for: bestMove.target),
+                        side: bestMove.side,
                         kind: bestMove.kind
                     )
                 )
                 moveCooldownFrames = 6
+                expectedTurn = nextTurn(after: bestMove.side)
             }
         }
 
@@ -527,16 +542,6 @@ final class BoardTracker {
 
         for point in currentOccupied where cellTracks[point] == nil {
             createTrack(at: point)
-        }
-
-        for recognizedPiece in recognized {
-            guard let trackID = cellTracks[recognizedPiece.point],
-                  var track = tracks[trackID] else {
-                continue
-            }
-            track.kind = recognizedPiece.kind
-            track.lastSeenFrame = frameIndex
-            tracks[trackID] = track
         }
 
         // 静止棋子也必须刷新 lastSeenFrame，否则连续几帧没有移动就会被误删，
@@ -556,6 +561,46 @@ final class BoardTracker {
         }
 
         return moves
+    }
+
+    private func ownerSide(for track: BoardTrack) -> BoardSide {
+        let origin = track.history.first ?? track.current
+        return BoardTracker.side(for: origin)
+    }
+
+    private func nextTurn(after side: BoardSide) -> BoardSide {
+        switch side {
+        case .ours: return .rightEnemy
+        case .rightEnemy: return .teammate
+        case .teammate: return .leftEnemy
+        case .leftEnemy: return .ours
+        case .center: return .ours
+        }
+    }
+
+    private func applyRecognizedKinds(
+        _ recognized: [RecognizedBoardPiece]
+    ) {
+        for piece in recognized {
+            if let trackID = cellTracks[piece.point],
+               var track = tracks[trackID] {
+                track.kind = piece.kind
+                track.lastSeenFrame = frameIndex
+                tracks[trackID] = track
+                continue
+            }
+
+            guard let match = tracks.first(where: {
+                $0.value.current == piece.point
+                    || $0.value.history.last == piece.point
+            }) else {
+                continue
+            }
+            var track = match.value
+            track.kind = piece.kind
+            track.lastSeenFrame = frameIndex
+            tracks[match.key] = track
+        }
     }
 
     private func createTrack(at point: BoardPoint) {
