@@ -30,6 +30,8 @@ final class BoardTracker {
     private var stabilityProgress = 0
     private var unstableFrames = 0
     private var warmupOccupancy: [BoardPoint: Bool] = [:]
+    private var stableOccupancy: [BoardPoint: Bool] = [:]
+    private var occupancyStreaks: [BoardPoint: Int] = [:]
     private var previousOccupancy: [BoardPoint: Bool] = [:]
     private var previousScores: [BoardPoint: Double] = [:]
     private var cellTracks: [BoardPoint: String] = [:]
@@ -46,23 +48,35 @@ final class BoardTracker {
 
         let sampled = sampleBoard(pixelBuffer: pixelBuffer, boardRect: boardRect)
         let classification = makeOccupancy(from: sampled.scores)
-        let occupancy = classification.occupancy
-        let occupiedCount = occupancy.values.filter { $0 }.count
+        let rawOccupancy = classification.occupancy
+        let rawOccupiedCount = rawOccupancy.values.filter { $0 }.count
         let scoreSpread = (sampled.scores.values.max() ?? 0)
             - (sampled.scores.values.min() ?? 0)
-        let geometryReliable = (20...180).contains(occupiedCount)
+        let geometryReliable = (20...180).contains(rawOccupiedCount)
             && scoreSpread > 0.08
         let didStartSession = updateSessionGate(
-            occupancy: occupancy,
+            occupancy: rawOccupancy,
             geometryReliable: geometryReliable,
             phase: phase
         )
-        let ourOccupiedCount = countOurOpeningOccupancy(occupancy: occupancy)
+        let ourOccupiedCount = countOurOpeningOccupancy(occupancy: rawOccupancy)
         let boardLike = looksLikeGameBoard(
-            occupancy: occupancy,
+            occupancy: rawOccupancy,
             ourOccupiedCount: ourOccupiedCount
         )
         let isReliable = geometryReliable && isSessionReady
+        let occupancy: [BoardPoint: Bool]
+        if isReliable {
+            if didStartSession {
+                initializeStableOccupancy(rawOccupancy)
+                occupancy = rawOccupancy
+            } else {
+                occupancy = stabilizeOccupancy(rawOccupancy)
+            }
+        } else {
+            occupancy = rawOccupancy
+        }
+        let occupiedCount = occupancy.values.filter { $0 }.count
 
         var moves: [BoardMove] = []
         if isReliable {
@@ -122,6 +136,8 @@ final class BoardTracker {
         stabilityProgress = 0
         unstableFrames = 0
         warmupOccupancy.removeAll()
+        stableOccupancy.removeAll()
+        occupancyStreaks.removeAll()
         previousOccupancy.removeAll()
         previousScores.removeAll()
         cellTracks.removeAll()
@@ -229,6 +245,37 @@ final class BoardTracker {
         isSessionReady = true
         warmupOccupancy.removeAll()
         return true
+    }
+
+    private func initializeStableOccupancy(
+        _ occupancy: [BoardPoint: Bool]
+    ) {
+        stableOccupancy = occupancy
+        occupancyStreaks = occupancy.mapValues { $0 ? 1 : -1 }
+    }
+
+    private func stabilizeOccupancy(
+        _ raw: [BoardPoint: Bool]
+    ) -> [BoardPoint: Bool] {
+        var result = stableOccupancy
+        for (point, isRawOccupied) in raw {
+            let isStableOccupied = stableOccupancy[point] ?? false
+            let currentStreak = occupancyStreaks[point] ?? (isStableOccupied ? 1 : -1)
+            let nextStreak = isRawOccupied
+                ? max(1, currentStreak + 1)
+                : min(-1, currentStreak - 1)
+            occupancyStreaks[point] = nextStreak
+
+            if !isStableOccupied, nextStreak >= 2 {
+                result[point] = true
+            } else if isStableOccupied, nextStreak <= -2 {
+                result[point] = false
+            } else {
+                result[point] = isStableOccupied
+            }
+        }
+        stableOccupancy = result
+        return result
     }
 
     private func looksLikeGameBoard(
