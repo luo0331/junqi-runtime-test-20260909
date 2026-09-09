@@ -70,6 +70,7 @@ struct AnalyzeBoardImage {
             pixelBuffer: pixelBuffer,
             boardRect: detection.rect,
             usedFallbackRect: detection.usedFallback,
+            hasGameSignal: true,
             recognized: []
         )
         print("reliable=\(snapshot.isReliable)")

@@ -13,7 +13,12 @@ final class BoardTracker {
     static let gridSize = 17
 
     private var frameIndex = 0
+    private var sessionID = 1
     private var nextTrackNumber = 1
+    private var isSessionReady = false
+    private var stabilityProgress = 0
+    private var unstableFrames = 0
+    private var warmupOccupancy: [BoardPoint: Bool] = [:]
     private var previousOccupancy: [BoardPoint: Bool] = [:]
     private var previousScores: [BoardPoint: Double] = [:]
     private var cellTracks: [BoardPoint: String] = [:]
@@ -23,6 +28,7 @@ final class BoardTracker {
         pixelBuffer: CVPixelBuffer,
         boardRect: CGRect,
         usedFallbackRect: Bool,
+        hasGameSignal: Bool,
         recognized: [RecognizedBoardPiece]
     ) -> BoardSnapshot {
         frameIndex += 1
@@ -33,18 +39,28 @@ final class BoardTracker {
         let occupiedCount = occupancy.values.filter { $0 }.count
         let scoreSpread = (sampled.scores.values.max() ?? 0)
             - (sampled.scores.values.min() ?? 0)
-        // 是否可信只取决于棋盘占位是否合理，不再依赖步数 OCR。
-        // 固定棋盘区域和视觉定位都允许驱动实时跟踪。
-        let isReliable = (20...180).contains(occupiedCount)
+        let geometryReliable = (20...180).contains(occupiedCount)
             && scoreSpread > 0.08
+        let didStartSession = updateSessionGate(
+            occupancy: occupancy,
+            geometryReliable: geometryReliable,
+            hasGameSignal: hasGameSignal
+        )
+        let isReliable = geometryReliable && isSessionReady
 
-        let moves = isReliable
-            ? updateTracks(
+        var moves: [BoardMove] = []
+        if isReliable {
+            if didStartSession {
+                // 开局第一帧只建立基准，不产生移动事件。
+                previousOccupancy = occupancy
+                previousScores = sampled.scores
+            }
+            moves = updateTracks(
                 occupancy: occupancy,
                 scores: sampled.scores,
                 recognized: recognized
             )
-            : []
+        }
 
         if isReliable {
             previousOccupancy = occupancy
@@ -55,6 +71,9 @@ final class BoardTracker {
 
         return BoardSnapshot(
             frameIndex: frameIndex,
+            sessionID: sessionID,
+            isSessionReady: isSessionReady,
+            stabilityProgress: stabilityProgress,
             boardRect: boardRect,
             isReliable: isReliable,
             occupiedCount: occupiedCount,
@@ -71,11 +90,64 @@ final class BoardTracker {
 
     func reset() {
         frameIndex = 0
+        resetSession()
+    }
+
+    private func resetSession() {
+        sessionID += 1
         nextTrackNumber = 1
+        isSessionReady = false
+        stabilityProgress = 0
+        unstableFrames = 0
+        warmupOccupancy.removeAll()
         previousOccupancy.removeAll()
         previousScores.removeAll()
         cellTracks.removeAll()
         tracks.removeAll()
+    }
+
+    private func updateSessionGate(
+        occupancy: [BoardPoint: Bool],
+        geometryReliable: Bool,
+        hasGameSignal: Bool
+    ) -> Bool {
+        guard geometryReliable else {
+            stabilityProgress = 0
+            warmupOccupancy.removeAll()
+            if isSessionReady {
+                unstableFrames += 1
+                if unstableFrames >= 12 {
+                    resetSession()
+                }
+            }
+            return false
+        }
+
+        unstableFrames = 0
+        guard !isSessionReady else { return false }
+        guard hasGameSignal else {
+            stabilityProgress = 0
+            warmupOccupancy.removeAll()
+            return false
+        }
+
+        let current = Set(occupancy.compactMap { $0.value ? $0.key : nil })
+        let previous = Set(warmupOccupancy.compactMap { $0.value ? $0.key : nil })
+        if previous.isEmpty {
+            stabilityProgress = 1
+        } else {
+            let changed = current.symmetricDifference(previous).count
+            let changeRatio = Double(changed) / Double(max(1, current.count))
+            stabilityProgress = changeRatio <= 0.08
+                ? min(8, stabilityProgress + 1)
+                : 1
+        }
+        warmupOccupancy = occupancy
+
+        guard stabilityProgress >= 8 else { return false }
+        isSessionReady = true
+        warmupOccupancy.removeAll()
+        return true
     }
 
     static func boardPoint(for pixelPoint: CGPoint, in boardRect: CGRect) -> BoardPoint? {

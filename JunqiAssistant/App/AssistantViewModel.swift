@@ -34,6 +34,7 @@ final class AssistantViewModel: ObservableObject {
     private let keepAlive = BackgroundKeepAlive()
     private var currentStep: Int?
     private var latestOCRText = ""
+    private var currentBoardSessionID: Int?
 
     init() {
         oursBoardRecord = BoardRecordPersistence.load(owner: .ours)
@@ -49,6 +50,7 @@ final class AssistantViewModel: ObservableObject {
 
         do {
             analyzer.reset()
+            currentBoardSessionID = nil
             resetGameState()
             try server.start(
                 onStatus: { [weak self] text in
@@ -159,6 +161,11 @@ final class AssistantViewModel: ObservableObject {
         knownPiecesText = summarize(pieces: snapshot.pieces)
         trajectoryText = summarize(board: snapshot.board)
         latestBoard = snapshot.board
+        if let board = snapshot.board,
+           board.sessionID != currentBoardSessionID {
+            currentBoardSessionID = board.sessionID
+            resetGameState()
+        }
         if let board = snapshot.board, board.isReliable {
             let update = gameStateEngine.apply(board: board, step: snapshot.step)
             leftOpponent = update.leftOpponent
@@ -175,7 +182,11 @@ final class AssistantViewModel: ObservableObject {
                     .map(\.current)
             )
         } else {
-            liveStateText = "棋盘定位不稳定，暂不更新记牌"
+            if snapshot.board?.isSessionReady == false {
+                liveStateText = "等待进入棋局，暂不记牌"
+            } else {
+                liveStateText = "棋盘跟踪短暂中断"
+            }
             enemyBacks.removeAll()
         }
         statusText = snapshot.board == nil || snapshot.board?.isReliable == false
@@ -276,6 +287,9 @@ final class AssistantViewModel: ObservableObject {
 
     private func summarize(board: BoardSnapshot?) -> String {
         guard let board else { return "暂无轨迹" }
+        if !board.isSessionReady {
+            return "等待进入棋局 · 稳定确认\(board.stabilityProgress)/8"
+        }
         let source = board.usedFallbackRect ? "自动回退" : "视觉定位"
         let tracking = "\(source) · 占位\(board.occupiedCount) 轨迹\(board.tracks.count)"
         if board.occupiedCount < 60 || board.occupiedCount > 150 {

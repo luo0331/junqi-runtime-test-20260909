@@ -73,7 +73,7 @@ private struct LiveAssistantView: View {
                 .disabled(!model.isRunning)
             }
 
-            Text("测试构建 v37")
+            Text("测试构建 v38")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

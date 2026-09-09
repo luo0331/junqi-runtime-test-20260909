@@ -301,6 +301,9 @@ struct BoardTrack: Identifiable {
 
 struct BoardSnapshot {
     var frameIndex: Int
+    var sessionID: Int
+    var isSessionReady: Bool
+    var stabilityProgress: Int
     var boardRect: CGRect
     var isReliable: Bool
     var occupiedCount: Int

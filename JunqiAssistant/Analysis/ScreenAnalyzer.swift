@@ -221,6 +221,7 @@ final class ScreenAnalyzer {
             pixelBuffer: pixelBuffer,
             boardRect: detection.rect,
             usedFallbackRect: detection.usedFallback,
+            hasGameSignal: cachedStep != nil,
             recognized: recognized
         )
     }
@@ -258,15 +259,25 @@ final class ScreenAnalyzer {
     }
 
     private func parseStep(from text: String) -> Int? {
-        guard let regex = try? NSRegularExpression(pattern: "第\\s*(\\d+)\\s*步") else {
-            return nil
+        let compact = text.replacingOccurrences(of: " ", with: "")
+        let patterns = [
+            "第(\\d+)步",
+            "第(\\d+)",
+            "(\\d+)步"
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(compact.startIndex..<compact.endIndex, in: compact)
+            guard let match = regex.firstMatch(in: compact, range: range),
+                  match.numberOfRanges > 1,
+                  let stepRange = Range(match.range(at: 1), in: compact) else {
+                continue
+            }
+            if let step = Int(compact[stepRange]) {
+                return step
+            }
         }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, range: range), match.numberOfRanges > 1 else {
-            return nil
-        }
-        guard let stepRange = Range(match.range(at: 1), in: text) else { return nil }
-        return Int(text[stepRange])
+        return nil
     }
 }
 
