@@ -243,6 +243,10 @@ final class GameStateEngine {
               !piece.isDead else {
             return
         }
+        if piece.side == .leftEnemy || piece.side == .rightEnemy {
+            // 敌方剩余牌只能由确认的战斗结果扣除，不能仅凭轨迹丢失判定阵亡。
+            return
+        }
         markDead(pieceID: pieceID)
     }
 
