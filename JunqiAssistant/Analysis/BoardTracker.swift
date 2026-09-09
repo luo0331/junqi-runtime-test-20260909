@@ -153,12 +153,18 @@ final class BoardTracker {
         guard !isSessionReady else { return false }
 
         if phase == .starting {
+            guard looksLikeGameBoard(occupancy: occupancy) else { return false }
             isArmed = true
             isSessionReady = true
             warmupOccupancy.removeAll()
             return true
         }
         if phase == .playing {
+            guard looksLikeGameBoard(occupancy: occupancy) else {
+                stabilityProgress = 0
+                warmupOccupancy.removeAll()
+                return false
+            }
             stabilityProgress = min(2, stabilityProgress + 1)
             guard stabilityProgress >= 2 else { return false }
             isSessionReady = true

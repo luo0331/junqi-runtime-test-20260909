@@ -311,6 +311,11 @@ final class ScreenAnalyzer {
             || compact.contains("对战") {
             return .matched
         }
+        if compact.contains("四国暗棋")
+            || compact.contains("新手场")
+            || (compact.contains("第") && compact.contains("步")) {
+            return .playing
+        }
         if step != nil {
             return .playing
         }
