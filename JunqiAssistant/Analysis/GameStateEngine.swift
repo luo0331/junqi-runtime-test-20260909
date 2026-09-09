@@ -98,7 +98,7 @@ final class GameStateEngine {
         for (trackID, _) in previousTracks where currentTracks[trackID] == nil {
             let count = (missingFrames[trackID] ?? 0) + 1
             missingFrames[trackID] = count
-            if count >= 2 {
+            if count >= 6 {
                 markTrackDead(trackID)
             }
         }
@@ -239,6 +239,7 @@ final class GameStateEngine {
     private func markTrackDead(_ trackID: String) {
         guard let pieceID = trackToPiece[trackID],
               let piece = pieces[pieceID],
+              piece.trackID == trackID,
               !piece.isDead else {
             return
         }
