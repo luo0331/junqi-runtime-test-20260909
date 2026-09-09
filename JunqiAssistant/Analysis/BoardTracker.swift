@@ -30,7 +30,7 @@ final class BoardTracker {
     private var stabilityProgress = 0
     private var unstableFrames = 0
     private var moveCooldownFrames = 0
-    private var expectedTurn: BoardSide = .ours
+    private var expectedTurn: BoardSide?
     private var warmupOccupancy: [BoardPoint: Bool] = [:]
     private var stableOccupancy: [BoardPoint: Bool] = [:]
     private var occupancyStreaks: [BoardPoint: Int] = [:]
@@ -146,7 +146,7 @@ final class BoardTracker {
         stabilityProgress = 0
         unstableFrames = 0
         moveCooldownFrames = 0
-        expectedTurn = .ours
+        expectedTurn = nil
         warmupOccupancy.removeAll()
         stableOccupancy.removeAll()
         occupancyStreaks.removeAll()
@@ -501,8 +501,13 @@ final class BoardTracker {
         }
 
         // 一帧只确认一次行棋，并优先选择符合逆时针轮次的阵营。
-        let expectedCandidates = candidates.filter { $0.side == expectedTurn }
-        let bestMove = expectedCandidates.min {
+        let eligibleCandidates: [MoveCandidate]
+        if let expectedTurn {
+            eligibleCandidates = candidates.filter { $0.side == expectedTurn }
+        } else {
+            eligibleCandidates = candidates
+        }
+        let bestMove = eligibleCandidates.min {
             if $0.distance == $1.distance {
                 return pointSort($0.oldPoint, $1.oldPoint)
             }
@@ -527,7 +532,9 @@ final class BoardTracker {
                     )
                 )
                 moveCooldownFrames = 6
-                expectedTurn = nextTurn(after: bestMove.side)
+                if bestMove.side != .center {
+                    expectedTurn = nextTurn(after: bestMove.side)
+                }
             }
         }
 
