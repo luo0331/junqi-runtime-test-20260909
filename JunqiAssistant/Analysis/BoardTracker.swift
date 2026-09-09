@@ -266,9 +266,9 @@ final class BoardTracker {
                 : min(-1, currentStreak - 1)
             occupancyStreaks[point] = nextStreak
 
-            if !isStableOccupied, nextStreak >= 3 {
+            if !isStableOccupied, nextStreak >= 4 {
                 result[point] = true
-            } else if isStableOccupied, nextStreak <= -3 {
+            } else if isStableOccupied, nextStreak <= -4 {
                 result[point] = false
             } else {
                 result[point] = isStableOccupied
