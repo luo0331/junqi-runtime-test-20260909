@@ -212,6 +212,10 @@ struct RuntimeProbe {
         var previousReady = false
         var previousLeftRemaining = 25
         var previousRightRemaining = 25
+        var reliableFrames = 0
+        var moveFrames = 0
+        var totalMoves = 0
+        var totalEvents = 0
 
         while second < seconds {
             do {
@@ -223,16 +227,20 @@ struct RuntimeProbe {
                 let snapshot = await analyzer.analyze(pixelBuffer: pixelBuffer)
                 let board = snapshot.board
                 let ready = board?.isSessionReady ?? false
-                let phase = board?.gamePhase ?? .idle
                 let shouldPrint = frameIndex == 0
                     || frameIndex % 100 == 0
                     || ready != previousReady
-                    || phase != .idle
                 if shouldPrint {
                     print(snapshotText(frame: frameIndex, snapshot: snapshot))
                 }
                 if let board, board.isReliable {
+                    reliableFrames += 1
+                    if !board.moves.isEmpty {
+                        moveFrames += 1
+                        totalMoves += board.moves.count
+                    }
                     let update = engine.apply(board: board, step: snapshot.step)
+                    totalEvents += update.newEvents.count
                     let countChanged = update.leftOpponent.remainingCount != previousLeftRemaining
                         || update.rightOpponent.remainingCount != previousRightRemaining
                     if !update.newEvents.isEmpty || countChanged {
@@ -253,6 +261,11 @@ struct RuntimeProbe {
             frameIndex += 1
             second += interval
         }
+        print(
+            "=== video summary reliableFrames=\(reliableFrames) "
+                + "moveFrames=\(moveFrames) totalMoves=\(totalMoves) "
+                + "events=\(totalEvents) ==="
+        )
     }
 
     private static func snapshotText(
