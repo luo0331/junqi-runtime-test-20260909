@@ -29,6 +29,7 @@ final class BoardTracker {
     private var isArmed = false
     private var stabilityProgress = 0
     private var unstableFrames = 0
+    private var moveCooldownFrames = 0
     private var warmupOccupancy: [BoardPoint: Bool] = [:]
     private var stableOccupancy: [BoardPoint: Bool] = [:]
     private var occupancyStreaks: [BoardPoint: Int] = [:]
@@ -45,6 +46,9 @@ final class BoardTracker {
         recognized: [RecognizedBoardPiece]
     ) -> BoardSnapshot {
         frameIndex += 1
+        if moveCooldownFrames > 0 {
+            moveCooldownFrames -= 1
+        }
 
         let sampled = sampleBoard(pixelBuffer: pixelBuffer, boardRect: boardRect)
         let classification = makeOccupancy(from: sampled.scores)
@@ -135,6 +139,7 @@ final class BoardTracker {
         isArmed = false
         stabilityProgress = 0
         unstableFrames = 0
+        moveCooldownFrames = 0
         warmupOccupancy.removeAll()
         stableOccupancy.removeAll()
         occupancyStreaks.removeAll()
@@ -497,15 +502,18 @@ final class BoardTracker {
                 to: bestMove.target,
                 kind: bestMove.kind
             )
-            moves.append(
-                BoardMove(
-                    trackID: bestMove.trackID,
-                    from: bestMove.oldPoint,
-                    to: bestMove.target,
-                    side: BoardTracker.side(for: bestMove.target),
-                    kind: bestMove.kind
+            if moveCooldownFrames == 0 {
+                moves.append(
+                    BoardMove(
+                        trackID: bestMove.trackID,
+                        from: bestMove.oldPoint,
+                        to: bestMove.target,
+                        side: BoardTracker.side(for: bestMove.target),
+                        kind: bestMove.kind
+                    )
                 )
-            )
+                moveCooldownFrames = 6
+            }
         }
 
         let movedFrom = bestMove?.oldPoint
