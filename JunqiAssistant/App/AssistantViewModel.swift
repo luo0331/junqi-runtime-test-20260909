@@ -182,8 +182,9 @@ final class AssistantViewModel: ObservableObject {
                     .map(\.current)
             )
         } else {
-            if snapshot.board?.isSessionReady == false {
-                liveStateText = "等待进入棋局，暂不记牌"
+            if let phase = snapshot.board?.gamePhase,
+               snapshot.board?.isSessionReady == false {
+                liveStateText = "\(phase.title)，暂不记牌"
             } else {
                 liveStateText = "棋盘跟踪短暂中断"
             }
@@ -288,7 +289,7 @@ final class AssistantViewModel: ObservableObject {
     private func summarize(board: BoardSnapshot?) -> String {
         guard let board else { return "暂无轨迹" }
         if !board.isSessionReady {
-            return "等待进入棋局 · 稳定确认\(board.stabilityProgress)/8"
+            return "\(board.gamePhase.title) · 稳定确认\(board.stabilityProgress)/8"
         }
         let source = board.usedFallbackRect ? "自动回退" : "视觉定位"
         let tracking = "\(source) · 占位\(board.occupiedCount) 轨迹\(board.tracks.count)"

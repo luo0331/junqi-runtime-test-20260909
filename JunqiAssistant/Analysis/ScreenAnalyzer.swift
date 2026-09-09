@@ -15,6 +15,7 @@ final class ScreenAnalyzer {
     private var cachedStep: Int?
     private var cachedPieces: [DetectedPiece] = []
     private var cachedRecognizedPieces: [RecognizedBoardPiece] = []
+    private var cachedPhase: GameScreenPhase = .idle
     private var cachedRawText = ""
     private var lastOCRErrorText: String?
 
@@ -30,6 +31,7 @@ final class ScreenAnalyzer {
             self.cachedStep = nil
             self.cachedPieces.removeAll()
             self.cachedRecognizedPieces.removeAll()
+            self.cachedPhase = .idle
             self.cachedRawText = ""
             self.lastOCRErrorText = nil
         }
@@ -82,6 +84,7 @@ final class ScreenAnalyzer {
         var pieces: [DetectedPiece]
         var rawText: String
         var recognizedPieces: [RecognizedBoardPiece]
+        var phase: GameScreenPhase
         var errorText: String?
     }
 
@@ -144,6 +147,7 @@ final class ScreenAnalyzer {
                 pieces: [],
                 rawText: "OCR失败：\(error.localizedDescription)",
                 recognizedPieces: [],
+                phase: .idle,
                 errorText: "OCR失败：\(error.localizedDescription)"
             )
         }
@@ -154,6 +158,7 @@ final class ScreenAnalyzer {
             .compactMap { $0.topCandidates(1).first?.string }
             .joined(separator: "\n")
         let step = parseStep(from: stepText)
+        let phase = parsePhase(from: stepText, step: step)
 
         var pieces: [DetectedPiece] = []
         for observation in boardObservations {
@@ -191,6 +196,7 @@ final class ScreenAnalyzer {
             pieces: pieces,
             rawText: makeDisplayText(step: step, pieces: pieces),
             recognizedPieces: recognizedPieces,
+            phase: phase,
             errorText: nil
         )
     }
@@ -207,6 +213,7 @@ final class ScreenAnalyzer {
         cachedPieces = result.pieces
         cachedRawText = result.rawText
         cachedRecognizedPieces = result.recognizedPieces
+        cachedPhase = result.phase
         lastOCRErrorText = result.errorText
     }
 
@@ -221,7 +228,7 @@ final class ScreenAnalyzer {
             pixelBuffer: pixelBuffer,
             boardRect: detection.rect,
             usedFallbackRect: detection.usedFallback,
-            hasGameSignal: cachedStep != nil,
+            phase: cachedPhase,
             recognized: recognized
         )
     }
@@ -278,6 +285,36 @@ final class ScreenAnalyzer {
             }
         }
         return nil
+    }
+
+    private func parsePhase(
+        from text: String,
+        step: Int?
+    ) -> GameScreenPhase {
+        let compact = text
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "：", with: "")
+            .replacingOccurrences(of: ":", with: "")
+
+        if compact.contains("正在匹配")
+            || compact.contains("匹配小伙伴")
+            || compact.contains("匹配中") {
+            return .matching
+        }
+        if compact.contains("对局开始")
+            || compact.contains("开始对局")
+            || compact.contains("对局开") {
+            return .starting
+        }
+        if compact.contains("配对成功")
+            || compact.contains("对战") {
+            return .matched
+        }
+        if step != nil {
+            return .playing
+        }
+        return .idle
     }
 }
 

@@ -281,6 +281,24 @@ enum BoardSide: String, CaseIterable, Codable {
     }
 }
 
+enum GameScreenPhase: String {
+    case idle
+    case matching
+    case matched
+    case starting
+    case playing
+
+    var title: String {
+        switch self {
+        case .idle: return "等待匹配"
+        case .matching: return "正在匹配"
+        case .matched: return "已配对，等待对战"
+        case .starting: return "对局开始，建立基准"
+        case .playing: return "对局进行中"
+        }
+    }
+}
+
 struct BoardMove: Identifiable {
     var id = UUID()
     var trackID: String
@@ -304,6 +322,7 @@ struct BoardSnapshot {
     var sessionID: Int
     var isSessionReady: Bool
     var stabilityProgress: Int
+    var gamePhase: GameScreenPhase
     var boardRect: CGRect
     var isReliable: Bool
     var occupiedCount: Int

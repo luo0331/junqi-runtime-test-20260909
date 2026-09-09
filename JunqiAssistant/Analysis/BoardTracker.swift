@@ -16,6 +16,7 @@ final class BoardTracker {
     private var sessionID = 1
     private var nextTrackNumber = 1
     private var isSessionReady = false
+    private var isArmed = false
     private var stabilityProgress = 0
     private var unstableFrames = 0
     private var warmupOccupancy: [BoardPoint: Bool] = [:]
@@ -28,7 +29,7 @@ final class BoardTracker {
         pixelBuffer: CVPixelBuffer,
         boardRect: CGRect,
         usedFallbackRect: Bool,
-        hasGameSignal: Bool,
+        phase: GameScreenPhase,
         recognized: [RecognizedBoardPiece]
     ) -> BoardSnapshot {
         frameIndex += 1
@@ -44,7 +45,7 @@ final class BoardTracker {
         let didStartSession = updateSessionGate(
             occupancy: occupancy,
             geometryReliable: geometryReliable,
-            hasGameSignal: hasGameSignal
+            phase: phase
         )
         let isReliable = geometryReliable && isSessionReady
 
@@ -74,6 +75,7 @@ final class BoardTracker {
             sessionID: sessionID,
             isSessionReady: isSessionReady,
             stabilityProgress: stabilityProgress,
+            gamePhase: phase,
             boardRect: boardRect,
             isReliable: isReliable,
             occupiedCount: occupiedCount,
@@ -97,6 +99,7 @@ final class BoardTracker {
         sessionID += 1
         nextTrackNumber = 1
         isSessionReady = false
+        isArmed = false
         stabilityProgress = 0
         unstableFrames = 0
         warmupOccupancy.removeAll()
@@ -109,8 +112,21 @@ final class BoardTracker {
     private func updateSessionGate(
         occupancy: [BoardPoint: Bool],
         geometryReliable: Bool,
-        hasGameSignal: Bool
+        phase: GameScreenPhase
     ) -> Bool {
+        if phase == .matching {
+            isArmed = false
+            stabilityProgress = 0
+            warmupOccupancy.removeAll()
+            if isSessionReady {
+                unstableFrames += 1
+                if unstableFrames >= 8 {
+                    resetSession()
+                }
+            }
+            return false
+        }
+
         guard geometryReliable else {
             stabilityProgress = 0
             warmupOccupancy.removeAll()
@@ -125,7 +141,25 @@ final class BoardTracker {
 
         unstableFrames = 0
         guard !isSessionReady else { return false }
-        guard hasGameSignal else {
+
+        if phase == .starting {
+            isArmed = true
+            isSessionReady = true
+            warmupOccupancy.removeAll()
+            return true
+        }
+        if phase == .playing {
+            stabilityProgress = min(2, stabilityProgress + 1)
+            guard stabilityProgress >= 2 else { return false }
+            isSessionReady = true
+            warmupOccupancy.removeAll()
+            return true
+        }
+        if phase == .matched {
+            isArmed = true
+        }
+
+        guard isArmed else {
             stabilityProgress = 0
             warmupOccupancy.removeAll()
             return false
