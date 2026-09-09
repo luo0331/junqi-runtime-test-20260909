@@ -32,7 +32,6 @@ final class BoardTracker {
     private var warmupOccupancy: [BoardPoint: Bool] = [:]
     private var stableOccupancy: [BoardPoint: Bool] = [:]
     private var occupancyStreaks: [BoardPoint: Int] = [:]
-    private var sessionScoreThreshold: Double?
     private var previousOccupancy: [BoardPoint: Bool] = [:]
     private var previousScores: [BoardPoint: Double] = [:]
     private var cellTracks: [BoardPoint: String] = [:]
@@ -48,10 +47,7 @@ final class BoardTracker {
         frameIndex += 1
 
         let sampled = sampleBoard(pixelBuffer: pixelBuffer, boardRect: boardRect)
-        let classification = makeOccupancy(
-            from: sampled.scores,
-            fixedThreshold: sessionScoreThreshold
-        )
+        let classification = makeOccupancy(from: sampled.scores)
         let rawOccupancy = classification.occupancy
         let rawOccupiedCount = rawOccupancy.values.filter { $0 }.count
         let scoreSpread = (sampled.scores.values.max() ?? 0)
@@ -63,9 +59,6 @@ final class BoardTracker {
             geometryReliable: geometryReliable,
             phase: phase
         )
-        if didStartSession {
-            sessionScoreThreshold = classification.threshold
-        }
         let ourOccupiedCount = countOurOpeningOccupancy(occupancy: rawOccupancy)
         let boardLike = looksLikeGameBoard(
             occupancy: rawOccupancy,
@@ -145,7 +138,6 @@ final class BoardTracker {
         warmupOccupancy.removeAll()
         stableOccupancy.removeAll()
         occupancyStreaks.removeAll()
-        sessionScoreThreshold = nil
         previousOccupancy.removeAll()
         previousScores.removeAll()
         cellTracks.removeAll()
@@ -397,8 +389,7 @@ final class BoardTracker {
     }
 
     private func makeOccupancy(
-        from scores: [BoardPoint: Double],
-        fixedThreshold: Double?
+        from scores: [BoardPoint: Double]
     ) -> (occupancy: [BoardPoint: Bool], threshold: Double) {
         let values = scores.values.sorted()
         guard !values.isEmpty else { return ([:], 1) }
@@ -411,20 +402,12 @@ final class BoardTracker {
 
         let normalized = scores.mapValues { ($0 - minimum) / (maximum - minimum) }
         let normalizedValues = normalized.values.sorted()
-        var threshold: Double
-        if let fixedThreshold {
-            threshold = min(
-                1,
-                max(0, (fixedThreshold - minimum) / (maximum - minimum))
-            )
-        } else {
-            threshold = otsuThreshold(normalizedValues)
-        }
+        var threshold = otsuThreshold(normalizedValues)
 
         // 四国开局四方各 25 枚，共约 100 枚棋子。
         var occupied = normalized.mapValues { $0 > threshold }
         let occupiedCount = occupied.values.filter { $0 }.count
-        if fixedThreshold == nil, occupiedCount < 60 || occupiedCount > 150 {
+        if occupiedCount < 60 || occupiedCount > 150 {
             let index = min(
                 normalizedValues.count - 1,
                 max(0, Int(Double(normalizedValues.count) * 0.65))
@@ -439,8 +422,7 @@ final class BoardTracker {
             let score = normalized[point] ?? 0
             occupied[point] = score > threshold || (wasOccupied && score > threshold * 0.55)
         }
-        let absoluteThreshold = minimum + threshold * (maximum - minimum)
-        return (occupied, absoluteThreshold)
+        return (occupied, threshold)
     }
 
     private func updateTracks(
