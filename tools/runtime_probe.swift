@@ -101,7 +101,7 @@ struct RuntimeProbe {
                 print(snapshotText(frame: frame, snapshot: snapshot))
             }
             previousReady = board?.isSessionReady ?? false
-            try await Task.sleep(nanoseconds: 100_000_000)
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
     }
 

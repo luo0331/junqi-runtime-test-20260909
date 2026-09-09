@@ -40,3 +40,9 @@ jobs:
           if [ -d testdata/stream ]; then
             ./runtime_probe stream testdata/stream/*.jpg
           fi
+          if [ -f testdata/video.mp4 ]; then
+            mkdir -p testdata/fullstream
+            ffmpeg -hide_banner -loglevel error -i testdata/video.mp4 \
+              -vf fps=10 -q:v 2 testdata/fullstream/frame_%04d.jpg
+            ./runtime_probe stream testdata/fullstream/*.jpg
+          fi
