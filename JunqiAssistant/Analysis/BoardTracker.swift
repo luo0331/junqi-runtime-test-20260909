@@ -452,6 +452,18 @@ final class BoardTracker {
             tracks[trackID] = track
         }
 
+        // 静止棋子也必须刷新 lastSeenFrame，否则连续几帧没有移动就会被误删，
+        // 随后真实移动会因为轨迹已不存在而丢失。
+        for point in currentOccupied {
+            guard let trackID = cellTracks[point],
+                  var track = tracks[trackID] else {
+                continue
+            }
+            track.current = point
+            track.lastSeenFrame = frameIndex
+            tracks[trackID] = track
+        }
+
         tracks = tracks.filter { _, track in
             frameIndex - track.lastSeenFrame <= 4
         }
